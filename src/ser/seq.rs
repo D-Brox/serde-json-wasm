@@ -17,9 +17,9 @@ impl<'a> ser::SerializeSeq for SerializeSeq<'a> {
     type Ok = ();
     type Error = Error;
 
-    fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<()>
+    fn serialize_element<T>(&mut self, value: &T) -> Result<()>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         if !self.first {
             self.ser.buf.push(b',');
@@ -40,9 +40,9 @@ impl<'a> ser::SerializeTuple for SerializeSeq<'a> {
     type Ok = ();
     type Error = Error;
 
-    fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<()>
+    fn serialize_element<T>(&mut self, value: &T) -> Result<()>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         ser::SerializeSeq::serialize_element(self, value)
     }
@@ -56,9 +56,9 @@ impl<'a> ser::SerializeTupleVariant for SerializeSeq<'a> {
     type Ok = ();
     type Error = Error;
 
-    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<()>
+    fn serialize_field<T>(&mut self, value: &T) -> Result<()>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         ser::SerializeSeq::serialize_element(self, value)
     }

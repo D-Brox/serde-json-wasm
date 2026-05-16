@@ -334,21 +334,21 @@ mod tests {
 
     #[test]
     fn hex_decode_works() {
-        assert_eq!(hex_decode([b'0', b'0', b'0', b'0']), 0x0000);
-        assert_eq!(hex_decode([b'0', b'0', b'0', b'1']), 0x0001);
-        assert_eq!(hex_decode([b'0', b'0', b'1', b'0']), 0x0010);
-        assert_eq!(hex_decode([b'0', b'1', b'0', b'0']), 0x0100);
-        assert_eq!(hex_decode([b'1', b'0', b'0', b'0']), 0x1000);
-        assert_eq!(hex_decode([b'1', b'1', b'1', b'1']), 0x1111);
-        assert_eq!(hex_decode([b'1', b'1', b'1', b'0']), 0x1110);
-        assert_eq!(hex_decode([b'1', b'1', b'0', b'1']), 0x1101);
-        assert_eq!(hex_decode([b'1', b'0', b'1', b'1']), 0x1011);
-        assert_eq!(hex_decode([b'0', b'1', b'1', b'1']), 0x0111);
+        assert_eq!(hex_decode(*b"0000"), 0x0000);
+        assert_eq!(hex_decode(*b"0001"), 0x0001);
+        assert_eq!(hex_decode(*b"0010"), 0x0010);
+        assert_eq!(hex_decode(*b"0100"), 0x0100);
+        assert_eq!(hex_decode(*b"1000"), 0x1000);
+        assert_eq!(hex_decode(*b"1111"), 0x1111);
+        assert_eq!(hex_decode(*b"1110"), 0x1110);
+        assert_eq!(hex_decode(*b"1101"), 0x1101);
+        assert_eq!(hex_decode(*b"1011"), 0x1011);
+        assert_eq!(hex_decode(*b"0111"), 0x0111);
 
-        assert_eq!(hex_decode([b'2', b'3', b'4', b'5']), 0x2345);
-        assert_eq!(hex_decode([b'6', b'7', b'8', b'9']), 0x6789);
-        assert_eq!(hex_decode([b'a', b'b', b'c', b'd']), 0xabcd);
-        assert_eq!(hex_decode([b'e', b'f', b'A', b'B']), 0xefab);
-        assert_eq!(hex_decode([b'C', b'D', b'E', b'F']), 0xcdef);
+        assert_eq!(hex_decode(*b"2345"), 0x2345);
+        assert_eq!(hex_decode(*b"6789"), 0x6789);
+        assert_eq!(hex_decode(*b"abcd"), 0xabcd);
+        assert_eq!(hex_decode(*b"efAB"), 0xefab);
+        assert_eq!(hex_decode(*b"CDEF"), 0xcdef);
     }
 }

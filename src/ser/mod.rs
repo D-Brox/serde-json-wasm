@@ -101,8 +101,8 @@ pub(crate) use serialize_unsigned;
 macro_rules! serialize_signed {
     ($self:ident, $N:expr, $v:expr, $ixx:ident, $uxx:ident) => {{
         let v = $v;
-        let (signed, mut v) = if v == $ixx::min_value() {
-            (true, $ixx::max_value() as $uxx + 1)
+        let (signed, mut v) = if v == $ixx::MIN {
+            (true, $ixx::MAX as $uxx + 1)
         } else if v < 0 {
             (true, -v as $uxx)
         } else {
@@ -308,9 +308,9 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         Ok(())
     }
 
-    fn serialize_some<T: ?Sized>(self, value: &T) -> Result<Self::Ok>
+    fn serialize_some<T>(self, value: &T) -> Result<Self::Ok>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         value.serialize(self)
     }
@@ -337,14 +337,14 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         self.serialize_str(variant)
     }
 
-    fn serialize_newtype_struct<T: ?Sized>(self, _name: &'static str, value: &T) -> Result<Self::Ok>
+    fn serialize_newtype_struct<T>(self, _name: &'static str, value: &T) -> Result<Self::Ok>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         value.serialize(&mut *self)
     }
 
-    fn serialize_newtype_variant<T: ?Sized>(
+    fn serialize_newtype_variant<T>(
         self,
         _name: &'static str,
         _variant_index: u32,
@@ -352,7 +352,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         value: &T,
     ) -> Result<Self::Ok>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         self.buf.push(b'{');
         self.serialize_str(variant)?;
@@ -478,16 +478,16 @@ impl ser::SerializeMap for Unreachable {
     type Ok = ();
     type Error = Error;
 
-    fn serialize_key<T: ?Sized>(&mut self, _key: &T) -> Result<()>
+    fn serialize_key<T>(&mut self, _key: &T) -> Result<()>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         unreachable!()
     }
 
-    fn serialize_value<T: ?Sized>(&mut self, _value: &T) -> Result<()>
+    fn serialize_value<T>(&mut self, _value: &T) -> Result<()>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         unreachable!()
     }
@@ -501,9 +501,9 @@ impl ser::SerializeStructVariant for Unreachable {
     type Ok = ();
     type Error = Error;
 
-    fn serialize_field<T: ?Sized>(&mut self, _key: &'static str, _value: &T) -> Result<()>
+    fn serialize_field<T>(&mut self, _key: &'static str, _value: &T) -> Result<()>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         unreachable!()
     }
@@ -526,7 +526,6 @@ mod tests {
     use serde::{Serialize, Serializer};
     use serde_derive::{Deserialize, Serialize};
 
-    #[macro_export]
     macro_rules! assert_serde_json_serialize_eq {
         ($target:expr,) => {
             assert_serde_json_serialize_eq!($target);
