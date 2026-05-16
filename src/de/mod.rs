@@ -219,18 +219,17 @@ impl<'a> Deserializer<'a> {
 
         if self.peek() == Some(b'.') {
             self.eat_char();
-            match self.peek() {
-                Some(c) if c.is_ascii_digit() => {
-                    self.eat_char();
-                    while let Some(c) = self.peek() {
-                        if c.is_ascii_digit() {
-                            self.eat_char();
-                        } else {
-                            break;
-                        }
+            if self.peek().is_some_and(|c| c.is_ascii_digit()) {
+                self.eat_char();
+                while let Some(c) = self.peek() {
+                    if c.is_ascii_digit() {
+                        self.eat_char();
+                    } else {
+                        break;
                     }
                 }
-                _ => return Err(Error::InvalidType),
+            } else {
+                return Err(Error::InvalidType);
             }
         }
 
