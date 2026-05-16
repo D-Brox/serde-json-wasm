@@ -171,6 +171,93 @@ impl<'a> Deserializer<'a> {
     fn peek(&mut self) -> Option<u8> {
         self.slice.get(self.index).cloned()
     }
+
+    fn peek_is_float(&self) -> bool {
+        let mut i = self.index;
+        if self.slice.get(i) == Some(&b'-') {
+            i += 1;
+        }
+        match self.slice.get(i) {
+            Some(b'0') => {
+                i += 1;
+            }
+            Some(b'1'..=b'9') => {
+                i += 1;
+                while self.slice.get(i).is_some_and(|c| c.is_ascii_digit()) {
+                    i += 1;
+                }
+            }
+            _ => return false,
+        }
+        matches!(self.slice.get(i), Some(b'.') | Some(b'e') | Some(b'E'))
+    }
+
+    /// Parses a JSON number that may contain a fractional part or exponent.
+    fn parse_float(&mut self) -> Result<f64> {
+        let start = self.index;
+
+        if self.peek() == Some(b'-') {
+            self.eat_char();
+        }
+
+        match self.peek() {
+            Some(b'0') => {
+                self.eat_char();
+            }
+            Some(b'1'..=b'9') => {
+                self.eat_char();
+                while let Some(c) = self.peek() {
+                    if c.is_ascii_digit() {
+                        self.eat_char();
+                    } else {
+                        break;
+                    }
+                }
+            }
+            _ => return Err(Error::InvalidType),
+        };
+
+        if self.peek() == Some(b'.') {
+            self.eat_char();
+            match self.peek() {
+                Some(c) if c.is_ascii_digit() => {
+                    self.eat_char();
+                    while let Some(c) = self.peek() {
+                        if c.is_ascii_digit() {
+                            self.eat_char();
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                _ => return Err(Error::InvalidType),
+            }
+        }
+
+        if self.peek().is_some_and(|c| matches!(c, b'e' | b'E')) {
+            self.eat_char();
+            if matches!(self.peek(), Some(b'+' | b'-')) {
+                self.eat_char();
+            }
+            match self.peek() {
+                Some(c) if c.is_ascii_digit() => {
+                    self.eat_char();
+                    while let Some(c) = self.peek() {
+                        if c.is_ascii_digit() {
+                            self.eat_char();
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                _ => return Err(Error::InvalidType),
+            }
+        }
+
+        let s = core::str::from_utf8(&self.slice[start..self.index])
+            .map_err(|_| Error::InvalidNumber)?;
+        s.parse::<f64>().map_err(|_| Error::InvalidNumber)
+    }
 }
 
 // NOTE(deserialize_*signed) we avoid parsing into u64 and then casting to a smaller integer, which
@@ -256,6 +343,16 @@ macro_rules! deserialize_signed {
 }
 pub(crate) use deserialize_signed;
 
+macro_rules! deserialize_float {
+    ($self:ident, $visitor:ident, $fxx:ident, $visit_fxx:ident) => {{
+        $self
+            .parse_whitespace()
+            .ok_or(Error::EofWhileParsingValue)?;
+        let value = $self.parse_float()?;
+        $visitor.$visit_fxx(value as $fxx)
+    }};
+}
+
 impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
 
@@ -280,10 +377,18 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
                 visitor.visit_bool(false)
             }
             b'-' => {
-                deserialize_signed!(self, visitor, i64, visit_i64)
+                if self.peek_is_float() {
+                    deserialize_float!(self, visitor, f64, visit_f64)
+                } else {
+                    deserialize_signed!(self, visitor, i64, visit_i64)
+                }
             }
             b'0'..=b'9' => {
-                deserialize_unsigned!(self, visitor, u64, visit_u64)
+                if self.peek_is_float() {
+                    deserialize_float!(self, visitor, f64, visit_f64)
+                } else {
+                    deserialize_unsigned!(self, visitor, u64, visit_u64)
+                }
             }
             b'"' => {
                 self.eat_char();
@@ -410,18 +515,18 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         deserialize_unsigned!(self, visitor, u128, visit_u128)
     }
 
-    fn deserialize_f32<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        deserialize_float!(self, visitor, f32, visit_f32)
     }
 
-    fn deserialize_f64<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        deserialize_float!(self, visitor, f64, visit_f64)
     }
 
     fn deserialize_char<V>(self, _visitor: V) -> Result<V::Value>
@@ -1385,6 +1490,79 @@ mod tests {
                 messages: Vec::new()
             })
         );
+    }
+
+    #[test]
+    fn float_f64() {
+        assert_eq!(from_str::<f64>("0.0"), Ok(0.0));
+        assert_eq!(from_str::<f64>("1.21"), Ok(1.21));
+        assert_eq!(from_str::<f64>("-2.5"), Ok(-2.5));
+        assert_eq!(from_str::<f64>("1e10"), Ok(1e10));
+        assert_eq!(from_str::<f64>("1.5e-3"), Ok(1.5e-3));
+        assert_eq!(from_str::<f64>("1E10"), Ok(1e10));
+        assert_eq!(from_str::<f64>("-1.5e+2"), Ok(-1.5e+2));
+    }
+
+    #[test]
+    fn float_f32() {
+        assert_eq!(from_str::<f32>("0.0"), Ok(0.0));
+        assert_eq!(from_str::<f32>("1.21"), Ok(1.21));
+        assert_eq!(from_str::<f32>("-2.5"), Ok(-2.5));
+        assert_eq!(from_str::<f32>("1e10"), Ok(1e10));
+        assert_eq!(from_str::<f32>("1.5e-3"), Ok(1.5e-3));
+        assert_eq!(from_str::<f32>("1E10"), Ok(1e10));
+        assert_eq!(from_str::<f32>("-1.5e+2"), Ok(-1.5e+2));
+    }
+
+    #[test]
+    fn float_coercion() {
+        // Integer JSON values can deserialize as f64/f32
+        assert_eq!(from_str::<f64>("42"), Ok(42.0));
+        assert_eq!(from_str::<f64>("0"), Ok(0.0));
+        assert_eq!(from_str::<f64>("-7"), Ok(-7.0));
+
+        assert_eq!(from_str::<f32>("42"), Ok(42.0));
+        assert_eq!(from_str::<f32>("0"), Ok(0.0));
+        assert_eq!(from_str::<f32>("-7"), Ok(-7.0));
+    }
+
+    #[test]
+    fn float_in_struct() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Stats {
+            score: f64,
+            ratio: f32,
+        }
+        assert_eq!(
+            from_str::<Stats>(r#"{"score": 95.5, "ratio": 0.75}"#),
+            Ok(Stats {
+                score: 95.5,
+                ratio: 0.75,
+            })
+        );
+    }
+
+    #[test]
+    fn float_coercion_in_struct() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Stats {
+            score: f64,
+        }
+        assert_eq!(
+            from_str::<Stats>(r#"{"score": 42}"#),
+            Ok(Stats { score: 42.0 })
+        );
+    }
+
+    #[test]
+    fn float_invalid() {
+        assert!(from_str::<f64>("").is_err());
+        assert!(from_str::<f64>("true").is_err());
+        assert!(from_str::<f64>(r#""hello""#).is_err());
+        assert!(from_str::<f64>("12.34.56").is_err());
+        assert!(from_str::<f64>(".1").is_err());
+        assert!(from_str::<f64>("e2").is_err());
+        assert!(from_str::<f64>("E3").is_err());
     }
 
     // See https://iot.mozilla.org/wot/#thing-resource
